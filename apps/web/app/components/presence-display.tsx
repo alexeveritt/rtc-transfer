@@ -24,7 +24,7 @@ export function PresenceDisplay({ session, yourId }: PresenceDisplayProps) {
 			</div>
 
 			{session.status === "peer_joined" && (
-				<p className="text-sm text-green-400">Both peers connected. Ready for transfer.</p>
+				<p className="text-sm text-green-400">Both peers connected.</p>
 			)}
 		</div>
 	);

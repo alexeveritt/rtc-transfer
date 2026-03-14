@@ -10,7 +10,39 @@ export interface PingMessage {
 	type: "ping";
 }
 
-export type ClientMessage = SetNameMessage | PingMessage;
+export interface SignalMessage {
+	type: "signal";
+	data: {
+		type: "offer" | "answer" | "ice-candidate";
+		payload: unknown;
+	};
+}
+
+export interface FileOfferMessage {
+	type: "file_offer";
+	fileId: string;
+	fileName: string;
+	fileSize: number;
+	fileType: string;
+}
+
+export interface FileAcceptMessage {
+	type: "file_accept";
+	fileId: string;
+}
+
+export interface FileRejectMessage {
+	type: "file_reject";
+	fileId: string;
+}
+
+export type ClientMessage =
+	| SetNameMessage
+	| PingMessage
+	| SignalMessage
+	| FileOfferMessage
+	| FileAcceptMessage
+	| FileRejectMessage;
 
 export const SetNameSchema = v.object({
 	type: v.literal("set_name"),
@@ -21,7 +53,40 @@ export const PingSchema = v.object({
 	type: v.literal("ping"),
 });
 
-export const ClientMessageSchema = v.variant("type", [SetNameSchema, PingSchema]);
+export const SignalSchema = v.object({
+	type: v.literal("signal"),
+	data: v.object({
+		type: v.union([v.literal("offer"), v.literal("answer"), v.literal("ice-candidate")]),
+		payload: v.unknown(),
+	}),
+});
+
+export const FileOfferSchema = v.object({
+	type: v.literal("file_offer"),
+	fileId: v.string(),
+	fileName: v.string(),
+	fileSize: v.number(),
+	fileType: v.string(),
+});
+
+export const FileAcceptSchema = v.object({
+	type: v.literal("file_accept"),
+	fileId: v.string(),
+});
+
+export const FileRejectSchema = v.object({
+	type: v.literal("file_reject"),
+	fileId: v.string(),
+});
+
+export const ClientMessageSchema = v.variant("type", [
+	SetNameSchema,
+	PingSchema,
+	SignalSchema,
+	FileOfferSchema,
+	FileAcceptSchema,
+	FileRejectSchema,
+]);
 
 // Server messages
 export interface SessionStateMessage {
@@ -71,10 +136,44 @@ export interface PongMessage {
 	type: "pong";
 }
 
+export interface ServerSignalMessage {
+	type: "signal";
+	from: string;
+	data: {
+		type: "offer" | "answer" | "ice-candidate";
+		payload: unknown;
+	};
+}
+
+export interface ServerFileOfferMessage {
+	type: "file_offer";
+	from: string;
+	fileId: string;
+	fileName: string;
+	fileSize: number;
+	fileType: string;
+}
+
+export interface ServerFileAcceptMessage {
+	type: "file_accept";
+	from: string;
+	fileId: string;
+}
+
+export interface ServerFileRejectMessage {
+	type: "file_reject";
+	from: string;
+	fileId: string;
+}
+
 export type ServerMessage =
 	| SessionStateMessage
 	| ParticipantJoinedMessage
 	| ParticipantUpdatedMessage
 	| ParticipantLeftMessage
 	| ErrorMessage
-	| PongMessage;
+	| PongMessage
+	| ServerSignalMessage
+	| ServerFileOfferMessage
+	| ServerFileAcceptMessage
+	| ServerFileRejectMessage;

@@ -184,6 +184,38 @@ export class SessionDurableObject implements DurableObject {
 				this.sendTo(ws, { type: "pong" });
 				break;
 			}
+			case "signal": {
+				this.broadcast({ type: "signal", from: participantId, data: msg.data }, participantId);
+				break;
+			}
+			case "file_offer": {
+				this.broadcast(
+					{
+						type: "file_offer",
+						from: participantId,
+						fileId: msg.fileId,
+						fileName: msg.fileName,
+						fileSize: msg.fileSize,
+						fileType: msg.fileType,
+					},
+					participantId,
+				);
+				break;
+			}
+			case "file_accept": {
+				this.broadcast(
+					{ type: "file_accept", from: participantId, fileId: msg.fileId },
+					participantId,
+				);
+				break;
+			}
+			case "file_reject": {
+				this.broadcast(
+					{ type: "file_reject", from: participantId, fileId: msg.fileId },
+					participantId,
+				);
+				break;
+			}
 		}
 	}
 

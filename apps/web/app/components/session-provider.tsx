@@ -1,6 +1,12 @@
 import type { ParticipantInfo, ServerMessage, SessionPublicState } from "@rtc-transfer/protocol";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { IncomingFileOffer } from "../lib/webrtc";
+
+type SignalHandler = (from: string, data: { type: string; payload: unknown }) => void;
+type FileOfferHandler = (offer: IncomingFileOffer) => void;
+type FileAcceptHandler = (from: string, fileId: string) => void;
+type FileRejectHandler = (from: string, fileId: string) => void;
 
 interface SessionContextValue {
 	session: SessionPublicState | null;
@@ -8,6 +14,14 @@ interface SessionContextValue {
 	connected: boolean;
 	error: string | null;
 	sendName: (name: string) => void;
+	sendSignal: (data: { type: string; payload: unknown }) => void;
+	sendFileOffer: (fileId: string, fileName: string, fileSize: number, fileType: string) => void;
+	sendFileAccept: (fileId: string) => void;
+	sendFileReject: (fileId: string) => void;
+	onSignal: (handler: SignalHandler) => void;
+	onFileOffer: (handler: FileOfferHandler) => void;
+	onFileAccept: (handler: FileAcceptHandler) => void;
+	onFileReject: (handler: FileRejectHandler) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -31,6 +45,11 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 	const wsRef = useRef<WebSocket | null>(null);
 	const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+	const signalHandlerRef = useRef<SignalHandler | null>(null);
+	const fileOfferHandlerRef = useRef<FileOfferHandler | null>(null);
+	const fileAcceptHandlerRef = useRef<FileAcceptHandler | null>(null);
+	const fileRejectHandlerRef = useRef<FileRejectHandler | null>(null);
+
 	useEffect(() => {
 		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 		const wsUrl = `${protocol}//${window.location.host}/api/session/${code}/ws`;
@@ -40,7 +59,6 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 		ws.addEventListener("open", () => {
 			setConnected(true);
 			setError(null);
-			// Ping every 30 seconds to keep connection alive
 			pingIntervalRef.current = setInterval(() => {
 				if (ws.readyState === WebSocket.OPEN) {
 					ws.send(JSON.stringify({ type: "ping" }));
@@ -91,6 +109,24 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 				case "error":
 					setError(msg.message);
 					break;
+				case "signal":
+					signalHandlerRef.current?.(msg.from, msg.data);
+					break;
+				case "file_offer":
+					fileOfferHandlerRef.current?.({
+						fileId: msg.fileId,
+						fileName: msg.fileName,
+						fileSize: msg.fileSize,
+						fileType: msg.fileType,
+						from: msg.from,
+					});
+					break;
+				case "file_accept":
+					fileAcceptHandlerRef.current?.(msg.from, msg.fileId);
+					break;
+				case "file_reject":
+					fileRejectHandlerRef.current?.(msg.from, msg.fileId);
+					break;
 				case "pong":
 					break;
 			}
@@ -116,15 +152,70 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 		};
 	}, [code]);
 
-	const sendName = useCallback((name: string) => {
+	const send = useCallback((msg: unknown) => {
 		const ws = wsRef.current;
 		if (ws?.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: "set_name", name }));
+			ws.send(JSON.stringify(msg));
 		}
 	}, []);
 
+	const sendName = useCallback((name: string) => send({ type: "set_name", name }), [send]);
+
+	const sendSignal = useCallback(
+		(data: { type: string; payload: unknown }) => send({ type: "signal", data }),
+		[send],
+	);
+
+	const sendFileOffer = useCallback(
+		(fileId: string, fileName: string, fileSize: number, fileType: string) =>
+			send({ type: "file_offer", fileId, fileName, fileSize, fileType }),
+		[send],
+	);
+
+	const sendFileAccept = useCallback(
+		(fileId: string) => send({ type: "file_accept", fileId }),
+		[send],
+	);
+
+	const sendFileReject = useCallback(
+		(fileId: string) => send({ type: "file_reject", fileId }),
+		[send],
+	);
+
+	const onSignal = useCallback((handler: SignalHandler) => {
+		signalHandlerRef.current = handler;
+	}, []);
+
+	const onFileOffer = useCallback((handler: FileOfferHandler) => {
+		fileOfferHandlerRef.current = handler;
+	}, []);
+
+	const onFileAccept = useCallback((handler: FileAcceptHandler) => {
+		fileAcceptHandlerRef.current = handler;
+	}, []);
+
+	const onFileReject = useCallback((handler: FileRejectHandler) => {
+		fileRejectHandlerRef.current = handler;
+	}, []);
+
 	return (
-		<SessionContext value={{ session, yourId, connected, error, sendName }}>
+		<SessionContext
+			value={{
+				session,
+				yourId,
+				connected,
+				error,
+				sendName,
+				sendSignal,
+				sendFileOffer,
+				sendFileAccept,
+				sendFileReject,
+				onSignal,
+				onFileOffer,
+				onFileAccept,
+				onFileReject,
+			}}
+		>
 			{children}
 		</SessionContext>
 	);
