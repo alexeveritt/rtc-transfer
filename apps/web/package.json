@@ -1,0 +1,37 @@
+{
+	"name": "@rtc-transfer/web",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"typecheck": "tsc --noEmit",
+		"check": "biome check ."
+	},
+	"dependencies": {
+		"@react-router/cloudflare": "^7.3.0",
+		"@rtc-transfer/cloudflare": "workspace:*",
+		"@rtc-transfer/lib": "workspace:*",
+		"@rtc-transfer/protocol": "workspace:*",
+		"@rtc-transfer/ui": "workspace:*",
+		"isbot": "^5.1.36",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"react-router": "^7.3.0",
+		"valibot": "^1.0.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"@cloudflare/vite-plugin": "^1.0.0",
+		"@cloudflare/workers-types": "^4.20250313.0",
+		"@react-router/dev": "^7.3.0",
+		"@tailwindcss/vite": "^4.1.0",
+		"@types/react": "^19.1.0",
+		"@types/react-dom": "^19.1.0",
+		"tailwindcss": "^4.1.0",
+		"typescript": "^5.7.0",
+		"vite": "^6.2.0",
+		"wrangler": "^4.5.0"
+	}
+}

@@ -1,0 +1,20 @@
+{
+	"name": "@rtc-transfer/protocol",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"check": "biome check ."
+	},
+	"dependencies": {
+		"valibot": "^1.0.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"typescript": "^5.7.0"
+	}
+}

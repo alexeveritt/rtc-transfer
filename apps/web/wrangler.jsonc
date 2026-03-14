@@ -1,0 +1,19 @@
+{
+	"name": "rtc-transfer",
+	"main": "worker/index.ts",
+	"compatibility_date": "2025-03-14",
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "SESSION_DO",
+				"class_name": "SessionDurableObject"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_classes": ["SessionDurableObject"]
+		}
+	]
+}

@@ -1,0 +1,9 @@
+{
+	"extends": "../../packages/config-typescript/react.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"outDir": "dist",
+		"types": ["@cloudflare/workers-types", "vite/client"]
+	},
+	"include": ["app", "worker", "*.ts"]
+}
