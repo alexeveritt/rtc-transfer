@@ -1,17 +1,22 @@
 import { Button } from "@rtc-transfer/ui";
 import { useCallback } from "react";
+import { formatBytes } from "./transfer-progress";
 
 interface ReceivedFile {
 	fileId: string;
 	fileName: string;
 	blob: Blob;
+	senderName: string;
 }
 
 interface ReceivedFilesProps {
 	files: ReceivedFile[];
+	onRemove: (fileId: string) => void;
 }
 
-export function ReceivedFiles({ files }: ReceivedFilesProps) {
+export type { ReceivedFile };
+
+export function ReceivedFiles({ files, onRemove }: ReceivedFilesProps) {
 	const download = useCallback((file: ReceivedFile) => {
 		const url = URL.createObjectURL(file.blob);
 		const a = document.createElement("a");
@@ -31,10 +36,24 @@ export function ReceivedFiles({ files }: ReceivedFilesProps) {
 					key={file.fileId}
 					className="flex items-center justify-between rounded-lg bg-neutral-800 px-4 py-3"
 				>
-					<span className="truncate text-sm text-neutral-200">{file.fileName}</span>
-					<Button variant="secondary" onClick={() => download(file)}>
-						Download
-					</Button>
+					<div className="flex min-w-0 flex-col gap-0.5">
+						<span className="truncate text-sm text-neutral-200">{file.fileName}</span>
+						<span className="text-xs text-neutral-500">
+							{formatBytes(file.blob.size)} \u2022 Sent by {file.senderName}
+						</span>
+					</div>
+					<div className="ml-3 flex shrink-0 items-center gap-2">
+						<Button variant="secondary" onClick={() => download(file)}>
+							Download
+						</Button>
+						<button
+							type="button"
+							onClick={() => onRemove(file.fileId)}
+							className="text-xs text-neutral-500 transition-colors hover:text-neutral-300"
+						>
+							Remove
+						</button>
+					</div>
 				</div>
 			))}
 		</div>

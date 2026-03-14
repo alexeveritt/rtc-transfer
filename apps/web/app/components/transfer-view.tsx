@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FileTransferProgress } from "../lib/webrtc";
+import type { FileTransferProgress, IncomingFileOffer } from "../lib/webrtc";
 import { PeerConnection } from "../lib/webrtc";
+import type { CompletedTransfer } from "./completed-transfers";
+import { CompletedTransfers } from "./completed-transfers";
 import { FilePicker } from "./file-picker";
+import { IncomingOffer } from "./incoming-offer";
 import { NameEntry } from "./name-entry";
 import { PresenceDisplay } from "./presence-display";
+import type { ReceivedFile } from "./received-files";
 import { ReceivedFiles } from "./received-files";
 import { useSession } from "./session-provider";
 import { TransferProgress } from "./transfer-progress";
-
-interface ReceivedFile {
-	fileId: string;
-	fileName: string;
-	blob: Blob;
-}
 
 export function TransferView() {
 	const {
@@ -24,9 +22,11 @@ export function TransferView() {
 		sendSignal,
 		sendFileOffer,
 		sendFileAccept,
+		sendFileReject,
 		onSignal,
 		onFileOffer,
 		onFileAccept,
+		onFileReject,
 	} = useSession();
 
 	const pcRef = useRef<PeerConnection | null>(null);
@@ -35,9 +35,17 @@ export function TransferView() {
 	const [channelOpen, setChannelOpen] = useState(false);
 	const [transfers, setTransfers] = useState<Map<string, FileTransferProgress>>(new Map());
 	const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
+	const [completedSends, setCompletedSends] = useState<CompletedTransfer[]>([]);
+	const [pendingOffers, setPendingOffers] = useState<IncomingFileOffer[]>([]);
 
 	const isPeerJoined = session?.status === "peer_joined";
 	const isPolite = session?.participants[0]?.id === yourId;
+
+	const getPeerName = useCallback(() => {
+		if (!session || !yourId) return "Peer";
+		const peer = session.participants.find((p) => p.id !== yourId);
+		return peer?.name ?? "Peer";
+	}, [session, yourId]);
 
 	// Set up WebRTC when both peers are connected
 	useEffect(() => {
@@ -50,36 +58,75 @@ export function TransferView() {
 		pc.onDataChannelClose = () => setChannelOpen(false);
 
 		pc.onProgress = (progress) => {
-			setTransfers((prev) => {
-				const next = new Map(prev);
-				next.set(progress.fileId, progress);
-				return next;
-			});
+			if (progress.status === "complete") {
+				if (progress.direction === "send") {
+					// Move to completed sends
+					setCompletedSends((prev) => [
+						...prev,
+						{
+							fileId: progress.fileId,
+							fileName: progress.fileName,
+							fileSize: progress.fileSize,
+							durationMs:
+								progress.startedAt && progress.completedAt
+									? progress.completedAt - progress.startedAt
+									: 0,
+						},
+					]);
+					setTransfers((prev) => {
+						const next = new Map(prev);
+						next.delete(progress.fileId);
+						return next;
+					});
+				} else {
+					// Receive complete — remove from active transfers
+					setTransfers((prev) => {
+						const next = new Map(prev);
+						next.delete(progress.fileId);
+						return next;
+					});
+				}
+			} else {
+				setTransfers((prev) => {
+					const next = new Map(prev);
+					next.set(progress.fileId, progress);
+					return next;
+				});
+			}
 		};
 
 		pc.onFileReceived = (blob, fileName, fileId) => {
-			setReceivedFiles((prev) => [...prev, { fileId, fileName, blob }]);
+			setReceivedFiles((prev) => [...prev, { fileId, fileName, blob, senderName: getPeerName() }]);
 		};
 
 		pc.connect();
 
-		// Register signal handler
 		onSignal((_from, data) => {
 			pc.handleSignal(data);
 		});
 
-		// Register file offer handler - auto-accept
+		// Show incoming file offers for confirmation
 		onFileOffer((offer) => {
-			sendFileAccept(offer.fileId);
+			setPendingOffers((prev) => [...prev, offer]);
 		});
 
-		// Register file accept handler - start sending the file
+		// Peer accepted — start sending
 		onFileAccept((_from, fileId) => {
 			const file = pendingSendRef.current.get(fileId);
 			if (file) {
 				pendingSendRef.current.delete(fileId);
 				pc.sendFile(file, fileId);
 			}
+		});
+
+		// Peer rejected
+		onFileReject((_from, fileId) => {
+			pendingSendRef.current.delete(fileId);
+			setTransfers((prev) => {
+				const next = new Map(prev);
+				next.delete(fileId);
+				return next;
+			});
 		});
 
 		return () => {
@@ -95,7 +142,8 @@ export function TransferView() {
 		onSignal,
 		onFileOffer,
 		onFileAccept,
-		sendFileAccept,
+		onFileReject,
+		getPeerName,
 	]);
 
 	const handleFileSelected = useCallback(
@@ -103,7 +151,6 @@ export function TransferView() {
 			const fileId = crypto.randomUUID();
 			pendingSendRef.current.set(fileId, file);
 
-			// Set initial pending progress
 			setTransfers((prev) => {
 				const next = new Map(prev);
 				next.set(fileId, {
@@ -113,15 +160,40 @@ export function TransferView() {
 					transferred: 0,
 					direction: "send",
 					status: "pending",
+					startedAt: null,
+					completedAt: null,
 				});
 				return next;
 			});
 
-			// Send offer through signalling
 			sendFileOffer(fileId, file.name, file.size, file.type);
 		},
 		[sendFileOffer],
 	);
+
+	const handleAcceptOffer = useCallback(
+		(offer: IncomingFileOffer) => {
+			sendFileAccept(offer.fileId);
+			setPendingOffers((prev) => prev.filter((o) => o.fileId !== offer.fileId));
+		},
+		[sendFileAccept],
+	);
+
+	const handleRejectOffer = useCallback(
+		(offer: IncomingFileOffer) => {
+			sendFileReject(offer.fileId);
+			setPendingOffers((prev) => prev.filter((o) => o.fileId !== offer.fileId));
+		},
+		[sendFileReject],
+	);
+
+	const removeCompletedSend = useCallback((fileId: string) => {
+		setCompletedSends((prev) => prev.filter((t) => t.fileId !== fileId));
+	}, []);
+
+	const removeReceivedFile = useCallback((fileId: string) => {
+		setReceivedFiles((prev) => prev.filter((f) => f.fileId !== fileId));
+	}, []);
 
 	if (error) {
 		return (
@@ -142,24 +214,39 @@ export function TransferView() {
 		return <NameEntry onSubmit={sendName} />;
 	}
 
-	const transferList = Array.from(transfers.values());
+	const activeTransfers = Array.from(transfers.values());
+	const isTransferring = activeTransfers.some((t) => t.status === "transferring");
 
 	return (
-		<div className="flex w-full max-w-lg flex-col items-center gap-6">
+		<div className="flex w-full max-w-md flex-col items-center gap-6">
 			<PresenceDisplay session={session} yourId={yourId} />
 
-			{session.status === "peer_joined" && channelOpen && (
-				<FilePicker onFileSelected={handleFileSelected} disabled={!channelOpen} />
+			{/* Incoming file offers requiring confirmation */}
+			{pendingOffers.map((offer) => (
+				<IncomingOffer
+					key={offer.fileId}
+					fileName={offer.fileName}
+					fileSize={offer.fileSize}
+					senderName={getPeerName()}
+					onAccept={() => handleAcceptOffer(offer)}
+					onReject={() => handleRejectOffer(offer)}
+				/>
+			))}
+
+			{/* File picker — hidden while transferring */}
+			{session.status === "peer_joined" && channelOpen && !isTransferring && (
+				<FilePicker onFileSelected={handleFileSelected} />
 			)}
 
 			{session.status === "peer_joined" && !channelOpen && (
 				<p className="text-sm text-neutral-500">Establishing peer connection...</p>
 			)}
 
-			{transferList.length > 0 && (
+			{/* Active transfers */}
+			{activeTransfers.length > 0 && (
 				<div className="flex w-full flex-col gap-2">
 					<p className="text-sm font-medium text-neutral-400">Transfers</p>
-					{transferList.map((t) => (
+					{activeTransfers.map((t) => (
 						<TransferProgress
 							key={t.fileId}
 							fileName={t.fileName}
@@ -167,12 +254,18 @@ export function TransferView() {
 							transferred={t.transferred}
 							direction={t.direction}
 							status={t.status}
+							startedAt={t.startedAt}
+							completedAt={t.completedAt}
 						/>
 					))}
 				</div>
 			)}
 
-			<ReceivedFiles files={receivedFiles} />
+			{/* Completed sends (sender side) */}
+			<CompletedTransfers transfers={completedSends} onRemove={removeCompletedSend} />
+
+			{/* Received files (recipient side) */}
+			<ReceivedFiles files={receivedFiles} onRemove={removeReceivedFile} />
 		</div>
 	);
 }

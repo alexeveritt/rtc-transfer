@@ -1,11 +1,3 @@
-interface TransferProgressProps {
-	fileName: string;
-	fileSize: number;
-	transferred: number;
-	direction: "send" | "receive";
-	status: "pending" | "transferring" | "complete" | "error";
-}
-
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
 	const k = 1024;
@@ -14,14 +6,55 @@ function formatBytes(bytes: number): string {
 	return `${(bytes / k ** i).toFixed(1)} ${sizes[i]}`;
 }
 
+function formatDuration(ms: number): string {
+	const totalSeconds = Math.round(ms / 1000);
+	if (totalSeconds < 60) {
+		return `${totalSeconds}s`;
+	}
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+	return `${minutes}m ${seconds}s`;
+}
+
+function estimateTimeRemaining(
+	transferred: number,
+	fileSize: number,
+	startedAt: number | null,
+): string | null {
+	if (!startedAt || transferred === 0) return null;
+	const elapsed = Date.now() - startedAt;
+	const rate = transferred / elapsed;
+	const remaining = fileSize - transferred;
+	const msRemaining = remaining / rate;
+	return formatDuration(msRemaining);
+}
+
+interface TransferProgressProps {
+	fileName: string;
+	fileSize: number;
+	transferred: number;
+	direction: "send" | "receive";
+	status: "pending" | "transferring" | "complete" | "error";
+	startedAt: number | null;
+	completedAt: number | null;
+}
+
 export function TransferProgress({
 	fileName,
 	fileSize,
 	transferred,
 	direction,
 	status,
+	startedAt,
+	completedAt,
 }: TransferProgressProps) {
 	const percent = fileSize > 0 ? Math.min(100, Math.round((transferred / fileSize) * 100)) : 0;
+	const eta =
+		status === "transferring" ? estimateTimeRemaining(transferred, fileSize, startedAt) : null;
+	const duration =
+		status === "complete" && startedAt && completedAt
+			? formatDuration(completedAt - startedAt)
+			: null;
 
 	return (
 		<div className="w-full rounded-lg bg-neutral-800 p-4">
@@ -44,9 +77,17 @@ export function TransferProgress({
 					{formatBytes(transferred)} / {formatBytes(fileSize)}
 				</span>
 				<span>
-					{status === "complete" ? "Complete" : status === "error" ? "Error" : `${percent}%`}
+					{status === "complete" && duration
+						? `Complete in ${duration}`
+						: status === "error"
+							? "Error"
+							: eta
+								? `${percent}% \u2022 ${eta} remaining`
+								: `${percent}%`}
 				</span>
 			</div>
 		</div>
 	);
 }
+
+export { formatBytes, formatDuration };

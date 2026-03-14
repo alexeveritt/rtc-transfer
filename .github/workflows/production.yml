@@ -1,0 +1,74 @@
+name: Promote to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to deploy (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Update production branch to tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move production branch to selected tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+
+          git fetch origin --prune --tags
+          git fetch origin production:refs/remotes/origin/production || true
+
+          # Verify tag exists
+          git rev-parse "refs/tags/${TAG}" >/dev/null
+
+          # Get current remote production SHA for force-with-lease
+          REMOTE_PROD_SHA=""
+          if git show-ref --verify --quiet refs/remotes/origin/production; then
+            REMOTE_PROD_SHA=$(git rev-parse refs/remotes/origin/production)
+          fi
+          echo "Remote production SHA: ${REMOTE_PROD_SHA:-<none>}"
+
+          git checkout -B production "${TAG}"
+
+          # Use targeted lease so we only overwrite if production hasn't moved
+          LEASE_OPT=""
+          if [ -n "${REMOTE_PROD_SHA:-}" ]; then
+            LEASE_OPT="--force-with-lease=refs/heads/production:${REMOTE_PROD_SHA}"
+          else
+            LEASE_OPT="--force-with-lease"
+          fi
+
+          for attempt in 1 2; do
+            echo "Pushing production (attempt ${attempt})..."
+            if git push origin production ${LEASE_OPT}; then
+              echo "production updated"
+              break
+            fi
+
+            if [ "${attempt}" -eq 2 ]; then
+              echo "Push failed after retry"
+              exit 1
+            fi
+
+            echo "Push lease was stale; refetching and retrying..."
+            git fetch origin production:refs/remotes/origin/production
+            REMOTE_PROD_SHA=$(git rev-parse refs/remotes/origin/production)
+            LEASE_OPT="--force-with-lease=refs/heads/production:${REMOTE_PROD_SHA}"
+          done
+
+          echo "production now points to ${TAG}"

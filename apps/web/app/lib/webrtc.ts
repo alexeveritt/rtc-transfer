@@ -13,6 +13,8 @@ export interface FileTransferProgress {
 	transferred: number;
 	direction: "send" | "receive";
 	status: "pending" | "transferring" | "complete" | "error";
+	startedAt: number | null;
+	completedAt: number | null;
 }
 
 export interface IncomingFileOffer {
@@ -34,6 +36,7 @@ export class PeerConnection {
 		fileId: string;
 		file: File;
 		transferred: number;
+		startedAt: number;
 	} | null = null;
 
 	private currentReceive: {
@@ -43,6 +46,7 @@ export class PeerConnection {
 		fileType: string;
 		chunks: Uint8Array[];
 		transferred: number;
+		startedAt: number;
 	} | null = null;
 
 	onProgress?: (progress: FileTransferProgress) => void;
@@ -147,7 +151,8 @@ export class PeerConnection {
 			throw new Error("Data channel not open");
 		}
 
-		const send = { fileId, file, transferred: 0 };
+		const startedAt = Date.now();
+		const send = { fileId, file, transferred: 0, startedAt };
 		this.currentSend = send;
 
 		dc.send(
@@ -188,6 +193,8 @@ export class PeerConnection {
 					transferred: send.transferred,
 					direction: "send",
 					status: "transferring",
+					startedAt,
+					completedAt: null,
 				});
 			}
 
@@ -209,6 +216,8 @@ export class PeerConnection {
 			transferred: file.size,
 			direction: "send",
 			status: "complete",
+			startedAt,
+			completedAt: Date.now(),
 		});
 
 		this.currentSend = null;
@@ -229,6 +238,7 @@ export class PeerConnection {
 			const msg = JSON.parse(event.data);
 
 			if (msg.type === "file-start") {
+				const startedAt = Date.now();
 				this.currentReceive = {
 					fileId: msg.fileId,
 					fileName: msg.fileName,
@@ -236,6 +246,7 @@ export class PeerConnection {
 					fileType: msg.fileType,
 					chunks: [],
 					transferred: 0,
+					startedAt,
 				};
 				this.onProgress?.({
 					fileId: msg.fileId,
@@ -244,6 +255,8 @@ export class PeerConnection {
 					transferred: 0,
 					direction: "receive",
 					status: "transferring",
+					startedAt,
+					completedAt: null,
 				});
 			} else if (msg.type === "file-end" && this.currentReceive) {
 				const recv = this.currentReceive;
@@ -255,6 +268,8 @@ export class PeerConnection {
 					transferred: recv.fileSize,
 					direction: "receive",
 					status: "complete",
+					startedAt: recv.startedAt,
+					completedAt: Date.now(),
 				});
 				this.onFileReceived?.(blob, recv.fileName, recv.fileId);
 				this.currentReceive = null;
@@ -271,6 +286,8 @@ export class PeerConnection {
 				transferred: this.currentReceive.transferred,
 				direction: "receive",
 				status: "transferring",
+				startedAt: this.currentReceive.startedAt,
+				completedAt: null,
 			});
 		}
 	}
