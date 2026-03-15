@@ -8,4 +8,14 @@ pnpm --filter @rtc-transfer/web build
 # Bundle the server entry + its chunks into a single file.
 node scripts/bundle-worker.mjs
 
+# Tell Pages to serve static assets directly and only route
+# non-asset requests through the worker.
+cat > apps/web/build/client/_routes.json << 'EOF'
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": ["/assets/*"]
+}
+EOF
+
 echo "Pages build complete"
