@@ -36,13 +36,31 @@ export interface FileRejectMessage {
 	fileId: string;
 }
 
+export interface TransferPauseMessage {
+	type: "transfer_pause";
+	fileId: string;
+}
+
+export interface TransferResumeMessage {
+	type: "transfer_resume";
+	fileId: string;
+}
+
+export interface TransferCancelMessage {
+	type: "transfer_cancel";
+	fileId: string;
+}
+
 export type ClientMessage =
 	| SetNameMessage
 	| PingMessage
 	| SignalMessage
 	| FileOfferMessage
 	| FileAcceptMessage
-	| FileRejectMessage;
+	| FileRejectMessage
+	| TransferPauseMessage
+	| TransferResumeMessage
+	| TransferCancelMessage;
 
 export const SetNameSchema = v.object({
 	type: v.literal("set_name"),
@@ -79,6 +97,21 @@ export const FileRejectSchema = v.object({
 	fileId: v.string(),
 });
 
+export const TransferPauseSchema = v.object({
+	type: v.literal("transfer_pause"),
+	fileId: v.string(),
+});
+
+export const TransferResumeSchema = v.object({
+	type: v.literal("transfer_resume"),
+	fileId: v.string(),
+});
+
+export const TransferCancelSchema = v.object({
+	type: v.literal("transfer_cancel"),
+	fileId: v.string(),
+});
+
 export const ClientMessageSchema = v.variant("type", [
 	SetNameSchema,
 	PingSchema,
@@ -86,6 +119,9 @@ export const ClientMessageSchema = v.variant("type", [
 	FileOfferSchema,
 	FileAcceptSchema,
 	FileRejectSchema,
+	TransferPauseSchema,
+	TransferResumeSchema,
+	TransferCancelSchema,
 ]);
 
 // Server messages
@@ -166,6 +202,24 @@ export interface ServerFileRejectMessage {
 	fileId: string;
 }
 
+export interface ServerTransferPauseMessage {
+	type: "transfer_pause";
+	from: string;
+	fileId: string;
+}
+
+export interface ServerTransferResumeMessage {
+	type: "transfer_resume";
+	from: string;
+	fileId: string;
+}
+
+export interface ServerTransferCancelMessage {
+	type: "transfer_cancel";
+	from: string;
+	fileId: string;
+}
+
 export type ServerMessage =
 	| SessionStateMessage
 	| ParticipantJoinedMessage
@@ -176,4 +230,7 @@ export type ServerMessage =
 	| ServerSignalMessage
 	| ServerFileOfferMessage
 	| ServerFileAcceptMessage
-	| ServerFileRejectMessage;
+	| ServerFileRejectMessage
+	| ServerTransferPauseMessage
+	| ServerTransferResumeMessage
+	| ServerTransferCancelMessage;

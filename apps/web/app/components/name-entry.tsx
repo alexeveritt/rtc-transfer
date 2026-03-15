@@ -1,5 +1,5 @@
 import { Button, Input } from "@rtc-transfer/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface NameEntryProps {
 	onSubmit: (name: string) => void;
@@ -8,6 +8,25 @@ interface NameEntryProps {
 export function NameEntry({ onSubmit }: NameEntryProps) {
 	const [name, setName] = useState("");
 	const [error, setError] = useState("");
+	const [autoSubmitted, setAutoSubmitted] = useState(false);
+
+	useEffect(() => {
+		const stored = localStorage.getItem("rtc-transfer-name");
+		if (stored) {
+			setName(stored);
+		}
+	}, []);
+
+	useEffect(() => {
+		if (name && !autoSubmitted) {
+			const stored = localStorage.getItem("rtc-transfer-name");
+			if (stored && name === stored) {
+				setAutoSubmitted(true);
+				localStorage.setItem("rtc-transfer-name", name);
+				onSubmit(name);
+			}
+		}
+	}, [name, autoSubmitted, onSubmit]);
 
 	function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -20,12 +39,12 @@ export function NameEntry({ onSubmit }: NameEntryProps) {
 			setError("Name must be 40 characters or less");
 			return;
 		}
-		if (!/^[\w\s\-'.]+$/.test(trimmed)) {
-			setError("Name contains invalid characters");
-			return;
-		}
+		localStorage.setItem("rtc-transfer-name", trimmed);
 		onSubmit(trimmed);
 	}
+
+	const trimmed = name.trim();
+	const isDisabled = !trimmed || trimmed.length > 40;
 
 	return (
 		<form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
@@ -42,7 +61,9 @@ export function NameEntry({ onSubmit }: NameEntryProps) {
 				maxLength={40}
 				autoFocus
 			/>
-			<Button type="submit">Continue</Button>
+			<Button type="submit" disabled={isDisabled}>
+				Continue
+			</Button>
 		</form>
 	);
 }

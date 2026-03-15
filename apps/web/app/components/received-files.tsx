@@ -1,12 +1,13 @@
 import { Button } from "@rtc-transfer/ui";
 import { useCallback } from "react";
-import { formatBytes } from "./transfer-progress";
+import { formatBytes, formatDuration } from "./transfer-progress";
 
 interface ReceivedFile {
 	fileId: string;
 	fileName: string;
 	blob: Blob;
 	senderName: string;
+	durationMs: number;
 }
 
 interface ReceivedFilesProps {
@@ -39,7 +40,8 @@ export function ReceivedFiles({ files, onRemove }: ReceivedFilesProps) {
 					<div className="flex min-w-0 flex-col gap-0.5">
 						<span className="truncate text-sm text-neutral-200">{file.fileName}</span>
 						<span className="text-xs text-neutral-500">
-							{formatBytes(file.blob.size)} \u2022 Sent by {file.senderName}
+							{formatBytes(file.blob.size)} &bull; {formatDuration(file.durationMs)} &bull; From{" "}
+							{file.senderName}
 						</span>
 					</div>
 					<div className="ml-3 flex shrink-0 items-center gap-2">

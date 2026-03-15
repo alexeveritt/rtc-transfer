@@ -1,3 +1,5 @@
+import { Button } from "@rtc-transfer/ui";
+
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 B";
 	const k = 1024;
@@ -34,9 +36,12 @@ interface TransferProgressProps {
 	fileSize: number;
 	transferred: number;
 	direction: "send" | "receive";
-	status: "pending" | "transferring" | "complete" | "error";
+	status: "pending" | "transferring" | "paused" | "complete" | "cancelled" | "error";
 	startedAt: number | null;
 	completedAt: number | null;
+	onPause?: () => void;
+	onResume?: () => void;
+	onCancel?: () => void;
 }
 
 export function TransferProgress({
@@ -47,6 +52,9 @@ export function TransferProgress({
 	status,
 	startedAt,
 	completedAt,
+	onPause,
+	onResume,
+	onCancel,
 }: TransferProgressProps) {
 	const percent = fileSize > 0 ? Math.min(100, Math.round((transferred / fileSize) * 100)) : 0;
 	const eta =
@@ -67,7 +75,13 @@ export function TransferProgress({
 			<div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-700">
 				<div
 					className={`h-full rounded-full transition-all duration-200 ${
-						status === "complete" ? "bg-green-500" : "bg-blue-500"
+						status === "complete"
+							? "bg-green-500"
+							: status === "paused"
+								? "bg-yellow-500"
+								: status === "cancelled"
+									? "bg-neutral-500"
+									: "bg-blue-500"
 					}`}
 					style={{ width: `${percent}%` }}
 				/>
@@ -79,13 +93,36 @@ export function TransferProgress({
 				<span>
 					{status === "complete" && duration
 						? `Complete in ${duration}`
-						: status === "error"
-							? "Error"
-							: eta
-								? `${percent}% \u2022 ${eta} remaining`
-								: `${percent}%`}
+						: status === "paused"
+							? "Paused"
+							: status === "cancelled"
+								? "Cancelled"
+								: status === "error"
+									? "Error"
+									: eta
+										? `${percent}% \u2022 ${eta} remaining`
+										: `${percent}%`}
 				</span>
 			</div>
+			{(status === "transferring" || status === "paused") && (
+				<div className="mt-2 flex gap-2">
+					{status === "transferring" && onPause && (
+						<Button variant="secondary" onClick={onPause}>
+							Pause
+						</Button>
+					)}
+					{status === "paused" && onResume && (
+						<Button variant="secondary" onClick={onResume}>
+							Resume
+						</Button>
+					)}
+					{onCancel && (
+						<Button variant="secondary" onClick={onCancel}>
+							Cancel
+						</Button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

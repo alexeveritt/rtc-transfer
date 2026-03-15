@@ -7,6 +7,7 @@ type SignalHandler = (from: string, data: { type: string; payload: unknown }) =>
 type FileOfferHandler = (offer: IncomingFileOffer) => void;
 type FileAcceptHandler = (from: string, fileId: string) => void;
 type FileRejectHandler = (from: string, fileId: string) => void;
+type TransferControlHandler = (from: string, fileId: string) => void;
 
 interface SessionContextValue {
 	session: SessionPublicState | null;
@@ -18,10 +19,16 @@ interface SessionContextValue {
 	sendFileOffer: (fileId: string, fileName: string, fileSize: number, fileType: string) => void;
 	sendFileAccept: (fileId: string) => void;
 	sendFileReject: (fileId: string) => void;
+	sendTransferPause: (fileId: string) => void;
+	sendTransferResume: (fileId: string) => void;
+	sendTransferCancel: (fileId: string) => void;
 	onSignal: (handler: SignalHandler) => void;
 	onFileOffer: (handler: FileOfferHandler) => void;
 	onFileAccept: (handler: FileAcceptHandler) => void;
 	onFileReject: (handler: FileRejectHandler) => void;
+	onTransferPause: (handler: TransferControlHandler) => void;
+	onTransferResume: (handler: TransferControlHandler) => void;
+	onTransferCancel: (handler: TransferControlHandler) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -49,6 +56,9 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 	const fileOfferHandlerRef = useRef<FileOfferHandler | null>(null);
 	const fileAcceptHandlerRef = useRef<FileAcceptHandler | null>(null);
 	const fileRejectHandlerRef = useRef<FileRejectHandler | null>(null);
+	const transferPauseHandlerRef = useRef<TransferControlHandler | null>(null);
+	const transferResumeHandlerRef = useRef<TransferControlHandler | null>(null);
+	const transferCancelHandlerRef = useRef<TransferControlHandler | null>(null);
 
 	useEffect(() => {
 		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -127,6 +137,15 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 				case "file_reject":
 					fileRejectHandlerRef.current?.(msg.from, msg.fileId);
 					break;
+				case "transfer_pause":
+					transferPauseHandlerRef.current?.(msg.from, msg.fileId);
+					break;
+				case "transfer_resume":
+					transferResumeHandlerRef.current?.(msg.from, msg.fileId);
+					break;
+				case "transfer_cancel":
+					transferCancelHandlerRef.current?.(msg.from, msg.fileId);
+					break;
 				case "pong":
 					break;
 			}
@@ -182,6 +201,21 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 		[send],
 	);
 
+	const sendTransferPause = useCallback(
+		(fileId: string) => send({ type: "transfer_pause", fileId }),
+		[send],
+	);
+
+	const sendTransferResume = useCallback(
+		(fileId: string) => send({ type: "transfer_resume", fileId }),
+		[send],
+	);
+
+	const sendTransferCancel = useCallback(
+		(fileId: string) => send({ type: "transfer_cancel", fileId }),
+		[send],
+	);
+
 	const onSignal = useCallback((handler: SignalHandler) => {
 		signalHandlerRef.current = handler;
 	}, []);
@@ -198,6 +232,18 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 		fileRejectHandlerRef.current = handler;
 	}, []);
 
+	const onTransferPause = useCallback((handler: TransferControlHandler) => {
+		transferPauseHandlerRef.current = handler;
+	}, []);
+
+	const onTransferResume = useCallback((handler: TransferControlHandler) => {
+		transferResumeHandlerRef.current = handler;
+	}, []);
+
+	const onTransferCancel = useCallback((handler: TransferControlHandler) => {
+		transferCancelHandlerRef.current = handler;
+	}, []);
+
 	return (
 		<SessionContext
 			value={{
@@ -210,10 +256,16 @@ export function SessionProvider({ code, children }: SessionProviderProps) {
 				sendFileOffer,
 				sendFileAccept,
 				sendFileReject,
+				sendTransferPause,
+				sendTransferResume,
+				sendTransferCancel,
 				onSignal,
 				onFileOffer,
 				onFileAccept,
 				onFileReject,
+				onTransferPause,
+				onTransferResume,
+				onTransferCancel,
 			}}
 		>
 			{children}

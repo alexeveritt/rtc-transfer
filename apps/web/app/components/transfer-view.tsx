@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import type { FileTransferProgress, IncomingFileOffer } from "../lib/webrtc";
 import { PeerConnection } from "../lib/webrtc";
 import type { CompletedTransfer } from "./completed-transfers";
@@ -23,12 +24,19 @@ export function TransferView() {
 		sendFileOffer,
 		sendFileAccept,
 		sendFileReject,
+		sendTransferPause,
+		sendTransferResume,
+		sendTransferCancel,
 		onSignal,
 		onFileOffer,
 		onFileAccept,
 		onFileReject,
+		onTransferPause,
+		onTransferResume,
+		onTransferCancel,
 	} = useSession();
 
+	const navigate = useNavigate();
 	const pcRef = useRef<PeerConnection | null>(null);
 	const pendingSendRef = useRef<Map<string, File>>(new Map());
 
@@ -47,7 +55,9 @@ export function TransferView() {
 		return peer?.name ?? "Peer";
 	}, [session, yourId]);
 
-	// Set up WebRTC when both peers are connected
+	// Track receive start times for duration calculation
+	const receiveStartTimesRef = useRef<Map<string, number>>(new Map());
+
 	useEffect(() => {
 		if (!isPeerJoined || !yourId) return;
 
@@ -58,9 +68,13 @@ export function TransferView() {
 		pc.onDataChannelClose = () => setChannelOpen(false);
 
 		pc.onProgress = (progress) => {
+			// Track receive start time
+			if (progress.direction === "receive" && progress.startedAt) {
+				receiveStartTimesRef.current.set(progress.fileId, progress.startedAt);
+			}
+
 			if (progress.status === "complete") {
 				if (progress.direction === "send") {
-					// Move to completed sends
 					setCompletedSends((prev) => [
 						...prev,
 						{
@@ -73,19 +87,12 @@ export function TransferView() {
 									: 0,
 						},
 					]);
-					setTransfers((prev) => {
-						const next = new Map(prev);
-						next.delete(progress.fileId);
-						return next;
-					});
-				} else {
-					// Receive complete — remove from active transfers
-					setTransfers((prev) => {
-						const next = new Map(prev);
-						next.delete(progress.fileId);
-						return next;
-					});
 				}
+				setTransfers((prev) => {
+					const next = new Map(prev);
+					next.delete(progress.fileId);
+					return next;
+				});
 			} else {
 				setTransfers((prev) => {
 					const next = new Map(prev);
@@ -96,7 +103,24 @@ export function TransferView() {
 		};
 
 		pc.onFileReceived = (blob, fileName, fileId) => {
-			setReceivedFiles((prev) => [...prev, { fileId, fileName, blob, senderName: getPeerName() }]);
+			const startedAt = receiveStartTimesRef.current.get(fileId) ?? Date.now();
+			const durationMs = Date.now() - startedAt;
+			receiveStartTimesRef.current.delete(fileId);
+			setReceivedFiles((prev) => [
+				...prev,
+				{ fileId, fileName, blob, senderName: getPeerName(), durationMs },
+			]);
+		};
+
+		pc.onTransferCancelled = (fileId, direction) => {
+			setTransfers((prev) => {
+				const next = new Map(prev);
+				next.delete(fileId);
+				return next;
+			});
+			if (direction === "send") {
+				pendingSendRef.current.delete(fileId);
+			}
 		};
 
 		pc.connect();
@@ -105,12 +129,10 @@ export function TransferView() {
 			pc.handleSignal(data);
 		});
 
-		// Show incoming file offers for confirmation
 		onFileOffer((offer) => {
 			setPendingOffers((prev) => [...prev, offer]);
 		});
 
-		// Peer accepted — start sending
 		onFileAccept((_from, fileId) => {
 			const file = pendingSendRef.current.get(fileId);
 			if (file) {
@@ -119,9 +141,29 @@ export function TransferView() {
 			}
 		});
 
-		// Peer rejected
 		onFileReject((_from, fileId) => {
 			pendingSendRef.current.delete(fileId);
+			setTransfers((prev) => {
+				const next = new Map(prev);
+				next.delete(fileId);
+				return next;
+			});
+		});
+
+		onTransferPause((_from, fileId) => {
+			// Remote paused — pause our side too
+			pc.pauseSend(fileId);
+			pc.pauseReceive(fileId);
+		});
+
+		onTransferResume((_from, fileId) => {
+			pc.resumeSend(fileId);
+			pc.resumeReceive(fileId);
+		});
+
+		onTransferCancel((_from, fileId) => {
+			pc.cancelSend(fileId);
+			pc.cancelReceive(fileId);
 			setTransfers((prev) => {
 				const next = new Map(prev);
 				next.delete(fileId);
@@ -143,6 +185,9 @@ export function TransferView() {
 		onFileOffer,
 		onFileAccept,
 		onFileReject,
+		onTransferPause,
+		onTransferResume,
+		onTransferCancel,
 		getPeerName,
 	]);
 
@@ -187,6 +232,59 @@ export function TransferView() {
 		[sendFileReject],
 	);
 
+	const handlePause = useCallback(
+		(fileId: string) => {
+			const pc = pcRef.current;
+			if (!pc) return;
+			const t = transfers.get(fileId);
+			if (!t) return;
+			if (t.direction === "send") {
+				pc.pauseSend(fileId);
+			} else {
+				pc.pauseReceive(fileId);
+			}
+			sendTransferPause(fileId);
+		},
+		[transfers, sendTransferPause],
+	);
+
+	const handleResume = useCallback(
+		(fileId: string) => {
+			const pc = pcRef.current;
+			if (!pc) return;
+			const t = transfers.get(fileId);
+			if (!t) return;
+			if (t.direction === "send") {
+				pc.resumeSend(fileId);
+			} else {
+				pc.resumeReceive(fileId);
+			}
+			sendTransferResume(fileId);
+		},
+		[transfers, sendTransferResume],
+	);
+
+	const handleCancel = useCallback(
+		(fileId: string) => {
+			const pc = pcRef.current;
+			if (!pc) return;
+			const t = transfers.get(fileId);
+			if (!t) return;
+			if (t.direction === "send") {
+				pc.cancelSend(fileId);
+			} else {
+				pc.cancelReceive(fileId);
+			}
+			sendTransferCancel(fileId);
+			setTransfers((prev) => {
+				const next = new Map(prev);
+				next.delete(fileId);
+				return next;
+			});
+		},
+		[transfers, sendTransferCancel],
+	);
+
 	const removeCompletedSend = useCallback((fileId: string) => {
 		setCompletedSends((prev) => prev.filter((t) => t.fileId !== fileId));
 	}, []);
@@ -194,6 +292,10 @@ export function TransferView() {
 	const removeReceivedFile = useCallback((fileId: string) => {
 		setReceivedFiles((prev) => prev.filter((f) => f.fileId !== fileId));
 	}, []);
+
+	const handleCancelSession = useCallback(() => {
+		navigate("/");
+	}, [navigate]);
 
 	if (error) {
 		return (
@@ -215,11 +317,20 @@ export function TransferView() {
 	}
 
 	const activeTransfers = Array.from(transfers.values());
-	const isTransferring = activeTransfers.some((t) => t.status === "transferring");
+	const isTransferring = activeTransfers.some(
+		(t) => t.status === "transferring" || t.status === "paused",
+	);
+
+	const sendingTransfers = activeTransfers.filter((t) => t.direction === "send");
+	const receivingTransfers = activeTransfers.filter((t) => t.direction === "receive");
 
 	return (
 		<div className="flex w-full max-w-md flex-col items-center gap-6">
-			<PresenceDisplay session={session} yourId={yourId} />
+			<PresenceDisplay
+				session={session}
+				yourId={yourId}
+				onCancel={session.status !== "peer_joined" ? handleCancelSession : undefined}
+			/>
 
 			{/* Incoming file offers requiring confirmation */}
 			{pendingOffers.map((offer) => (
@@ -233,7 +344,7 @@ export function TransferView() {
 				/>
 			))}
 
-			{/* File picker — hidden while transferring */}
+			{/* File picker — visible when connected and not actively transferring */}
 			{session.status === "peer_joined" && channelOpen && !isTransferring && (
 				<FilePicker onFileSelected={handleFileSelected} />
 			)}
@@ -242,11 +353,11 @@ export function TransferView() {
 				<p className="text-sm text-neutral-500">Establishing peer connection...</p>
 			)}
 
-			{/* Active transfers */}
-			{activeTransfers.length > 0 && (
+			{/* Sending */}
+			{sendingTransfers.length > 0 && (
 				<div className="flex w-full flex-col gap-2">
-					<p className="text-sm font-medium text-neutral-400">Transfers</p>
-					{activeTransfers.map((t) => (
+					<p className="text-sm font-medium text-blue-400">Sending</p>
+					{sendingTransfers.map((t) => (
 						<TransferProgress
 							key={t.fileId}
 							fileName={t.fileName}
@@ -256,15 +367,40 @@ export function TransferView() {
 							status={t.status}
 							startedAt={t.startedAt}
 							completedAt={t.completedAt}
+							onPause={() => handlePause(t.fileId)}
+							onResume={() => handleResume(t.fileId)}
+							onCancel={() => handleCancel(t.fileId)}
 						/>
 					))}
 				</div>
 			)}
 
-			{/* Completed sends (sender side) */}
+			{/* Receiving */}
+			{receivingTransfers.length > 0 && (
+				<div className="flex w-full flex-col gap-2">
+					<p className="text-sm font-medium text-green-400">Receiving</p>
+					{receivingTransfers.map((t) => (
+						<TransferProgress
+							key={t.fileId}
+							fileName={t.fileName}
+							fileSize={t.fileSize}
+							transferred={t.transferred}
+							direction={t.direction}
+							status={t.status}
+							startedAt={t.startedAt}
+							completedAt={t.completedAt}
+							onPause={() => handlePause(t.fileId)}
+							onResume={() => handleResume(t.fileId)}
+							onCancel={() => handleCancel(t.fileId)}
+						/>
+					))}
+				</div>
+			)}
+
+			{/* Completed sends */}
 			<CompletedTransfers transfers={completedSends} onRemove={removeCompletedSend} />
 
-			{/* Received files (recipient side) */}
+			{/* Received files */}
 			<ReceivedFiles files={receivedFiles} onRemove={removeReceivedFile} />
 		</div>
 	);

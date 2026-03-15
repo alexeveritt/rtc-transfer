@@ -217,6 +217,27 @@ export class SessionDurableObject implements DurableObject {
 				);
 				break;
 			}
+			case "transfer_pause": {
+				this.broadcast(
+					{ type: "transfer_pause", from: participantId, fileId: msg.fileId },
+					participantId,
+				);
+				break;
+			}
+			case "transfer_resume": {
+				this.broadcast(
+					{ type: "transfer_resume", from: participantId, fileId: msg.fileId },
+					participantId,
+				);
+				break;
+			}
+			case "transfer_cancel": {
+				this.broadcast(
+					{ type: "transfer_cancel", from: participantId, fileId: msg.fileId },
+					participantId,
+				);
+				break;
+			}
 		}
 	}
 
