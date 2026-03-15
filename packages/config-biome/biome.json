@@ -1,7 +1,7 @@
 {
 	"$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
 	"files": {
-		"ignore": [".react-router/**", "dist/**", ".wrangler/**"]
+		"ignore": [".react-router/**", "dist/**", "build/**", ".wrangler/**"]
 	},
 	"formatter": {
 		"indentStyle": "tab",

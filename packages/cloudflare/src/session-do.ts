@@ -139,6 +139,7 @@ export class SessionDurableObject implements DurableObject {
 
 	async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
 		if (typeof message !== "string") return;
+		await this.loadState();
 
 		const attachment = (
 			ws as unknown as { deserializeAttachment: () => ParticipantAttachment }
@@ -225,10 +226,12 @@ export class SessionDurableObject implements DurableObject {
 		_reason: string,
 		_wasClean: boolean,
 	): Promise<void> {
+		await this.loadState();
 		await this.handleDisconnect(ws);
 	}
 
 	async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+		await this.loadState();
 		await this.handleDisconnect(ws);
 	}
 

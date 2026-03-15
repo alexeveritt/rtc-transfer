@@ -1,18 +1,18 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(pnpm install:*)",
-      "Bash(pnpm approve-builds:*)",
-      "Bash(pnpm config:*)",
-      "Bash(pnpm:*)",
-      "Bash(npx biome:*)",
-      "Bash(curl:*)",
-      "Bash(pkill:*)",
-      "Bash(find:*)",
-      "Bash(python3:*)",
-      "Bash(chmod:*)",
-      "Bash(npx esbuild:*)",
-      "Bash(node:*)"
-    ]
-  }
+	"permissions": {
+		"allow": [
+			"Bash(pnpm install:*)",
+			"Bash(pnpm approve-builds:*)",
+			"Bash(pnpm config:*)",
+			"Bash(pnpm:*)",
+			"Bash(npx biome:*)",
+			"Bash(curl:*)",
+			"Bash(pkill:*)",
+			"Bash(find:*)",
+			"Bash(python3:*)",
+			"Bash(chmod:*)",
+			"Bash(npx esbuild:*)",
+			"Bash(node:*)"
+		]
+	}
 }
