@@ -1,5 +1,0 @@
-# Cloudflare Pages deployment config.
-# Local dev uses apps/web/wrangler.jsonc instead.
-name = "rtc-transfer"
-pages_build_output_dir = "apps/web/build/client"
-compatibility_date = "2025-03-14"
