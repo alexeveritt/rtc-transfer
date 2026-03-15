@@ -49,11 +49,12 @@ export function TransferView() {
 	const isPeerJoined = session?.status === "peer_joined";
 	const isPolite = session?.participants[0]?.id === yourId;
 
-	const getPeerName = useCallback(() => {
+	const getPeerNameRef = useRef<() => string>(() => "Peer");
+	getPeerNameRef.current = () => {
 		if (!session || !yourId) return "Peer";
 		const peer = session.participants.find((p) => p.id !== yourId);
 		return peer?.name ?? "Peer";
-	}, [session, yourId]);
+	};
 
 	// Track receive start times for duration calculation
 	const receiveStartTimesRef = useRef<Map<string, number>>(new Map());
@@ -108,7 +109,7 @@ export function TransferView() {
 			receiveStartTimesRef.current.delete(fileId);
 			setReceivedFiles((prev) => [
 				...prev,
-				{ fileId, fileName, blob, senderName: getPeerName(), durationMs },
+				{ fileId, fileName, blob, senderName: getPeerNameRef.current(), durationMs },
 			]);
 		};
 
@@ -188,7 +189,6 @@ export function TransferView() {
 		onTransferPause,
 		onTransferResume,
 		onTransferCancel,
-		getPeerName,
 	]);
 
 	const handleFileSelected = useCallback(
@@ -338,7 +338,7 @@ export function TransferView() {
 					key={offer.fileId}
 					fileName={offer.fileName}
 					fileSize={offer.fileSize}
-					senderName={getPeerName()}
+					senderName={getPeerNameRef.current()}
 					onAccept={() => handleAcceptOffer(offer)}
 					onReject={() => handleRejectOffer(offer)}
 				/>
